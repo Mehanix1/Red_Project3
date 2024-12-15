@@ -48,12 +48,13 @@ def get_weather(lat, lon):
 # функция для получения типа погоды
 def check_bad_weather(temperature, precipitation_type, wind_speed, relative_humidity, precipitation_probability):
     try:
+        print(temperature, precipitation_type, wind_speed, relative_humidity, precipitation_probability)
         # считаем погоду хорошей только при данных значениях параметров
-        is_good_temperature = 0 <= temperature <= 35
+        is_good_temperature = -5 <= temperature <= 35
         is_good_precipitation_type = precipitation_type is None
-        is_good_wind_speed = wind_speed < 10
-        is_good_humidity = relative_humidity is None or 30 <= relative_humidity <= 70
-        is_good_precipitation_probability = precipitation_probability is None or precipitation_probability < 30
+        is_good_wind_speed = wind_speed < 15
+        is_good_humidity = relative_humidity is None or 20 <= relative_humidity <= 90
+        is_good_precipitation_probability = precipitation_probability is None or precipitation_probability < 40
         # если все показатели погоды хорошие (либо отсутствует информация о них), то возвращаем "Хорошая погода"
         if (is_good_temperature and is_good_precipitation_type and is_good_wind_speed
                 and is_good_humidity and is_good_precipitation_probability):
