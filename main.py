@@ -2,6 +2,7 @@ from dash import Dash, dcc, html, Input, Output
 import plotly.express as px
 import pandas as pd
 import dash_bootstrap_components as dbc
+from dash.dependencies import Input, Output, State
 import requests
 
 ACCUWEATHER_API_KEY = 'wKEpFgKjDiwCabovgjHBQmrqpxH3mHAr'
@@ -93,11 +94,11 @@ def get_coordinates_by_city(city):
 
 
 app.layout = html.Div([
-    html.H1('Прогноз погоды'),
+    html.H1('Прогноз погоды для городов на вашем маршруте'),
     dcc.Input(id='start_city', type='text', placeholder='Начальный город'),
     dcc.Input(id='city_on_route', type='text', placeholder='Промежуточная точка'),
     html.Button('Добавить промежуточную точку маршрута', id='add_city_button', n_clicks=0),
-    html.Div(id='waypoints-container', children=[]),
+    html.Div(id='cities_list', children=[]),
     dcc.Input(id='end_city', type='text', placeholder='Конечный город'),
     dcc.Dropdown(
         id='days_number_dropdown',
@@ -116,6 +117,19 @@ app.layout = html.Div([
     dcc.Graph(id='precipitation_probability_graph'),
     html.Div(id='forecast_spreadsheet', children=[])
 ])
+
+
+@app.callback(
+    Output('cities_list', 'children'),
+    Input('add_city_button', 'n_clicks'),
+    State('city_on_route', 'value'),
+    State('cities_list', 'children')
+)
+def add_city(n_clicks, city, cities):
+    if n_clicks and city:
+        cities.append(html.Div(city))
+    return cities
+
 
 if __name__ == '__main__':
     app.run_server(debug=True)
