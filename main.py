@@ -5,7 +5,7 @@ import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
 import requests
 
-ACCUWEATHER_API_KEY = 'wKEpFgKjDiwCabovgjHBQmrqpxH3mHAr'
+ACCUWEATHER_API_KEY = 'ndQ9sGBunRuXgqEcS7lOMAE1bY2AbIWj'
 GEOCODING_API_KEY = '48bb8cb44b814a34a2d4228089dd4369'
 
 app = Dash(__name__)
@@ -114,11 +114,11 @@ app.layout = html.Div([
     dcc.Graph(id='temperature_graph'),
     dcc.Graph(id='wind_speed_graph'),
     dcc.Graph(id='relative_humidity_graph'),
-    dcc.Graph(id='precipitation_probability_graph'),
     html.Div(id='forecast_spreadsheet', children=[])
 ])
 
 
+# функция для добавления промежуточной точки маршрута
 @app.callback(
     Output('cities_list', 'children'),
     Input('add_city_button', 'n_clicks'),
@@ -129,6 +129,53 @@ def add_city(n_clicks, city, cities):
     if n_clicks and city:
         cities.append(html.Div(city))
     return cities
+
+
+@app.callback(
+    Output('temperature_graph', 'figure'),
+    Output('wind_speed_graph', 'figure'),
+    Output('relative_humidity_graph', 'figure'),
+    Input('show_button', 'n_clicks'),
+    State('start_city', 'value'),
+    State('end_city', 'value'),
+    State('cities_list', 'children'),
+    State('days_number_dropdown', 'value')
+)
+def update_weather_forecast(n_clicks, start_city, end_city, cities_list: list, days):
+    cities_list = [city['props']['children'] for city in cities_list]
+    if n_clicks > 0:
+        # Собираем все города на маршруте
+        all_cities_on_route = cities_list
+        all_cities_on_route.insert(0, start_city)
+        all_cities_on_route.append(end_city)
+
+        # Словарь для хранения данных о погоде
+        cities_weather_data = {
+            'City': [],
+            'Temperature': [],
+            'Wind Speed': [],
+            'Relative Humidity': [],
+        }
+
+        # Получаем данные о погоде для каждого города
+        for city in all_cities_on_route:
+            weather_data = get_weather(*get_coordinates_by_city(city))
+            if isinstance(weather_data, tuple):
+                temperature, precipitation_type, wind_speed, relative_humidity = weather_data[0:4]
+                cities_weather_data['City'].append(city)
+                cities_weather_data['Temperature'].append(temperature)
+                cities_weather_data['Wind Speed'].append(wind_speed)
+                cities_weather_data['Relative Humidity'].append(relative_humidity)
+
+        # Создаем графики с использованием Plotly Express
+        temperature_fig = px.line(cities_weather_data, x='City', y='Temperature', title='Температура по городам')
+        wind_speed_fig = px.bar(cities_weather_data, x='City', y='Wind Speed', title='Скорость ветра по городам')
+        humidity_fig = px.bar(cities_weather_data, x='City', y='Relative Humidity',
+                              title='Относительная влажность по городам')
+
+        return temperature_fig, wind_speed_fig, humidity_fig
+
+    return {}, {}, {}
 
 
 if __name__ == '__main__':
