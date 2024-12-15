@@ -7,6 +7,8 @@ import requests
 ACCUWEATHER_API_KEY = 'wKEpFgKjDiwCabovgjHBQmrqpxH3mHAr'
 GEOCODING_API_KEY = '48bb8cb44b814a34a2d4228089dd4369'
 
+app = Dash(__name__)
+
 
 def get_weather(lat, lon):
     try:
@@ -88,3 +90,32 @@ def get_coordinates_by_city(city):
             return 'Ошибка:', response.status_code
     except Exception as e:
         return f'Ошибка {e}'
+
+
+app.layout = html.Div([
+    html.H1('Прогноз погоды'),
+    dcc.Input(id='start_city', type='text', placeholder='Начальный город'),
+    dcc.Input(id='city_on_route', type='text', placeholder='Промежуточная точка'),
+    html.Button('Добавить промежуточную точку маршрута', id='add_city_button', n_clicks=0),
+    html.Div(id='waypoints-container', children=[]),
+    dcc.Input(id='end_city', type='text', placeholder='Конечный город'),
+    dcc.Dropdown(
+        id='days_number_dropdown',
+        options=[
+            {'label': '1 день', 'value': 1},
+            {'label': '5 дней', 'value': 5},
+        ],
+        value=1,
+        multi=False
+    ),
+    html.Button('Показать прогноз погоды', id='show_button', n_clicks=0),
+
+    dcc.Graph(id='temperature_graph'),
+    dcc.Graph(id='wind_speed_graph'),
+    dcc.Graph(id='relative_humidity_graph'),
+    dcc.Graph(id='precipitation_probability_graph'),
+    html.Div(id='forecast_spreadsheet', children=[])
+])
+
+if __name__ == '__main__':
+    app.run_server(debug=True)
