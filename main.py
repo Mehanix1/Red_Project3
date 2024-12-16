@@ -5,13 +5,15 @@ import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
 import requests
 
-ACCUWEATHER_API_KEY = 'ndQ9sGBunRuXgqEcS7lOMAE1bY2AbIWj'
+ACCUWEATHER_API_KEY = 'lI8LcSSgDlBrGpfPyt7BFZz3jbwTduMN'
 GEOCODING_API_KEY = '48bb8cb44b814a34a2d4228089dd4369'
 
 app = Dash(__name__)
 
+cached_city_weather_data = dict()
 
-def get_weather(lat, lon):
+
+def get_weather(lat, lon, day):
     try:
         # url для запроса для получения локации по координатам
         url_for_location = f'http://dataservice.accuweather.com/locations/v1/cities/geoposition/search'
@@ -23,7 +25,7 @@ def get_weather(lat, lon):
         if response.status_code == 200:
             location = response.json()['Key']
             # url для запроса для получения данных о погоде
-            url_for_weather = f'http://dataservice.accuweather.com/currentconditions/v1/{location}'
+            url_for_weather = f'https://dataservice.accuweather.com/forecasts/v1/daily/5day/{location}?apikey={ACCUWEATHER_API_KEY}&details=true'
             weather_params = {
                 'apikey': ACCUWEATHER_API_KEY,
                 'details': 'true'
@@ -32,37 +34,21 @@ def get_weather(lat, lon):
             weather_response = requests.get(url_for_weather, weather_params)
             if weather_response.status_code == 200:
                 weather_data = weather_response.json()
-
+                # pprint(weather_data)
                 # ключевые параметры прогноза погоды
-                temperature = weather_data[0]['Temperature']['Metric']['Value']
-                precipitation_type = weather_data[0]['PrecipitationType']
-                wind_speed = weather_data[0]['Wind']['Speed']['Metric']['Value']
-
+                # temperature = weather_data[0]['Temperature']['Metric']['Value']
+                temperature = round(
+                    (weather_data['DailyForecasts'][day]['Day']['WetBulbGlobeTemperature']['Average']['Value']) / 1.8,
+                    1)
+                # precipitation_type = weather_data[0]['PrecipitationType']
+                # wind_speed = weather_data[0]['Wind']['Speed']['Metric']['Value']
+                wind_speed = weather_data['DailyForecasts'][day]['Day']['Wind']['Speed']['Value'] / 2.237
                 # эти параметры не всегда существуют, поэтому используем get
-                relative_humidity = weather_data[0].get('RelativeHumidity', None)
-                precipitation_probability = weather_data[0].get('PrecipitationProbability', None)
-                return temperature, precipitation_type, wind_speed, relative_humidity, precipitation_probability
+                relative_humidity = weather_data['DailyForecasts'][day]['Day']['RelativeHumidity']['Average']
+                precipitation_probability = weather_data['DailyForecasts'][day]['Day']['PrecipitationProbability']
+                return temperature, wind_speed, relative_humidity, precipitation_probability
             return f'Ошибка {response.status_code}'
         return f'Ошибка {response.status_code}'
-    except Exception as e:
-        return f'Ошибка: {e}'
-
-
-# функция для получения типа погоды
-def check_bad_weather(temperature, precipitation_type, wind_speed, relative_humidity, precipitation_probability):
-    try:
-        print(temperature, precipitation_type, wind_speed, relative_humidity, precipitation_probability)
-        # считаем погоду хорошей только при данных значениях параметров
-        is_good_temperature = -5 <= temperature <= 35
-        is_good_precipitation_type = precipitation_type is None
-        is_good_wind_speed = wind_speed < 15
-        is_good_humidity = relative_humidity is None or 20 <= relative_humidity <= 90
-        is_good_precipitation_probability = precipitation_probability is None or precipitation_probability < 40
-        # если все показатели погоды хорошие (либо отсутствует информация о них), то возвращаем "Хорошая погода"
-        if (is_good_temperature and is_good_precipitation_type and is_good_wind_speed
-                and is_good_humidity and is_good_precipitation_probability):
-            return 'Хорошая погода'
-        return 'Плохая погода'
     except Exception as e:
         return f'Ошибка: {e}'
 
@@ -103,10 +89,13 @@ app.layout = html.Div([
     dcc.Dropdown(
         id='days_number_dropdown',
         options=[
-            {'label': '1 день', 'value': 1},
-            {'label': '5 дней', 'value': 5},
+            {'label': '1 день', 'value': 0},
+            {'label': '2 дня', 'value': 1},
+            {'label': '3 дня', 'value': 2},
+            {'label': '4 дня', 'value': 3},
+            {'label': '5 дней', 'value': 4},
         ],
-        value=1,
+        value=0,
         multi=False
     ),
     html.Button('Показать прогноз погоды', id='show_button', n_clicks=0),
@@ -114,6 +103,7 @@ app.layout = html.Div([
     dcc.Graph(id='temperature_graph'),
     dcc.Graph(id='wind_speed_graph'),
     dcc.Graph(id='relative_humidity_graph'),
+    dcc.Graph(id='precipitation_probability_graph'),
     html.Div(id='forecast_spreadsheet', children=[])
 ])
 
@@ -135,16 +125,16 @@ def add_city(n_clicks, city, cities):
     Output('temperature_graph', 'figure'),
     Output('wind_speed_graph', 'figure'),
     Output('relative_humidity_graph', 'figure'),
+    Output('precipitation_probability_graph', 'figure'),
     Input('show_button', 'n_clicks'),
     State('start_city', 'value'),
     State('end_city', 'value'),
     State('cities_list', 'children'),
     State('days_number_dropdown', 'value')
 )
-def update_weather_forecast(n_clicks, start_city, end_city, cities_list: list, days):
+def update_weather_forecast(n_clicks, start_city, end_city, cities_list, days):
     cities_list = [city['props']['children'] for city in cities_list]
     if n_clicks > 0:
-        # Собираем все города на маршруте
         all_cities_on_route = cities_list
         all_cities_on_route.insert(0, start_city)
         all_cities_on_route.append(end_city)
@@ -155,27 +145,35 @@ def update_weather_forecast(n_clicks, start_city, end_city, cities_list: list, d
             'Temperature': [],
             'Wind Speed': [],
             'Relative Humidity': [],
+            'Precipitation Probability': []
         }
 
-        # Получаем данные о погоде для каждого города
         for city in all_cities_on_route:
-            weather_data = get_weather(*get_coordinates_by_city(city))
+            if city not in cached_city_weather_data.keys():
+                weather_data = get_weather(*get_coordinates_by_city(city), days)
+                cached_city_weather_data[city] = weather_data
+            else:
+                weather_data = cached_city_weather_data[city]
             if isinstance(weather_data, tuple):
-                temperature, precipitation_type, wind_speed, relative_humidity = weather_data[0:4]
+                temperature, wind_speed, relative_humidity, precipitation_probability = weather_data[0:4]
                 cities_weather_data['City'].append(city)
                 cities_weather_data['Temperature'].append(temperature)
                 cities_weather_data['Wind Speed'].append(wind_speed)
                 cities_weather_data['Relative Humidity'].append(relative_humidity)
+                cities_weather_data['Precipitation Probability'].append(precipitation_probability)
+            else:
+                print(weather_data)
 
-        # Создаем графики с использованием Plotly Express
         temperature_fig = px.line(cities_weather_data, x='City', y='Temperature', title='Температура по городам')
         wind_speed_fig = px.bar(cities_weather_data, x='City', y='Wind Speed', title='Скорость ветра по городам')
         humidity_fig = px.bar(cities_weather_data, x='City', y='Relative Humidity',
                               title='Относительная влажность по городам')
+        precipitation_fig = px.bar(cities_weather_data, x='City', y='Precipitation Probability',
+                                   title='Вероятность осадков')
 
-        return temperature_fig, wind_speed_fig, humidity_fig
+        return temperature_fig, wind_speed_fig, humidity_fig, precipitation_fig
 
-    return {}, {}, {}
+    return {}, {}, {}, {}
 
 
 if __name__ == '__main__':
