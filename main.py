@@ -1,7 +1,5 @@
-from dash import Dash, dcc, html, Input, Output
+from dash import Dash, dcc, html
 import plotly.express as px
-import pandas as pd
-import dash_bootstrap_components as dbc
 from dash.dependencies import Input, Output, State
 import requests
 
@@ -45,13 +43,8 @@ def get_5_day_forecast(lat, lon):
 
 def get_weather_by_day(weather_data, day):
     # ключевые параметры прогноза погоды
-    temperature = round(
-        (weather_data['DailyForecasts'][day]['Day']['WetBulbGlobeTemperature']['Average']['Value']) / 1.8,
-        1)
-    # precipitation_type = weather_data[0]['PrecipitationType']
-    # wind_speed = weather_data[0]['Wind']['Speed']['Metric']['Value']
+    temperature = (weather_data['DailyForecasts'][day]['Day']['WetBulbGlobeTemperature']['Average']['Value'] - 32) / 1.8
     wind_speed = weather_data['DailyForecasts'][day]['Day']['Wind']['Speed']['Value'] / 2.237
-    # эти параметры не всегда существуют, поэтому используем get
     relative_humidity = weather_data['DailyForecasts'][day]['Day']['RelativeHumidity']['Average']
     precipitation_probability = weather_data['DailyForecasts'][day]['Day']['PrecipitationProbability']
     return temperature, wind_speed, relative_humidity, precipitation_probability
@@ -154,19 +147,20 @@ def update_weather_forecast(n_clicks, start_city, end_city, cities_list, days):
 
         for city in all_cities_on_route:
             if city not in cached_city_weather_data.keys():
-                weather_data = get_5_day_forecast(*get_coordinates_by_city(city), days)
+                weather_data = get_5_day_forecast(*get_coordinates_by_city(city))
                 cached_city_weather_data[city] = weather_data
             else:
                 weather_data = cached_city_weather_data[city]
-            if isinstance(weather_data, tuple):
-                temperature, wind_speed, relative_humidity, precipitation_probability = weather_data[0:4]
+            day_weather_data = get_weather_by_day(weather_data, days)
+            if isinstance(day_weather_data, tuple):
+                temperature, wind_speed, relative_humidity, precipitation_probability = day_weather_data[0:4]
                 cities_weather_data['City'].append(city)
                 cities_weather_data['Temperature'].append(temperature)
                 cities_weather_data['Wind Speed'].append(wind_speed)
                 cities_weather_data['Relative Humidity'].append(relative_humidity)
                 cities_weather_data['Precipitation Probability'].append(precipitation_probability)
             else:
-                print(weather_data)
+                print(day_weather_data)
 
         temperature_fig = px.line(cities_weather_data, x='City', y='Temperature', title='Температура по городам')
         wind_speed_fig = px.bar(cities_weather_data, x='City', y='Wind Speed', title='Скорость ветра по городам')
