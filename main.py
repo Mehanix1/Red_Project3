@@ -3,7 +3,7 @@ import plotly.express as px
 from dash.dependencies import Input, Output, State
 import requests
 
-ACCUWEATHER_API_KEY = 'lI8LcSSgDlBrGpfPyt7BFZz3jbwTduMN'
+ACCUWEATHER_API_KEY = 'A3XmBdWeP6NsGSHzUs4NBDuU1W9YeA4j'
 GEOCODING_API_KEY = '48bb8cb44b814a34a2d4228089dd4369'
 
 app = Dash(__name__)
@@ -42,12 +42,16 @@ def get_5_day_forecast(lat, lon):
 
 
 def get_weather_by_day(weather_data, day):
-    # ключевые параметры прогноза погоды
-    temperature = (weather_data['DailyForecasts'][day]['Day']['WetBulbGlobeTemperature']['Average']['Value'] - 32) / 1.8
-    wind_speed = weather_data['DailyForecasts'][day]['Day']['Wind']['Speed']['Value'] / 2.237
-    relative_humidity = weather_data['DailyForecasts'][day]['Day']['RelativeHumidity']['Average']
-    precipitation_probability = weather_data['DailyForecasts'][day]['Day']['PrecipitationProbability']
-    return temperature, wind_speed, relative_humidity, precipitation_probability
+    try:
+        # ключевые параметры прогноза погоды
+        temperature = (weather_data['DailyForecasts'][day]['Day']['WetBulbGlobeTemperature']['Average'][
+                           'Value'] - 32) / 1.8
+        wind_speed = weather_data['DailyForecasts'][day]['Day']['Wind']['Speed']['Value'] / 2.237
+        relative_humidity = weather_data['DailyForecasts'][day]['Day']['RelativeHumidity']['Average']
+        precipitation_probability = weather_data['DailyForecasts'][day]['Day']['PrecipitationProbability']
+        return temperature, wind_speed, relative_humidity, precipitation_probability
+    except Exception as e:
+        return f'Ошибка: {e}'
 
 
 # функция для получения координат по названию города
@@ -101,6 +105,10 @@ app.layout = html.Div([
     dcc.Graph(id='wind_speed_graph'),
     dcc.Graph(id='relative_humidity_graph'),
     dcc.Graph(id='precipitation_probability_graph'),
+    dcc.Graph(id='temperature_map'),
+    dcc.Graph(id='wind_speed_map'),
+    dcc.Graph(id='relative_humidity_map'),
+    dcc.Graph(id='precipitation_map'),
     html.Div(id='forecast_spreadsheet', children=[])
 ])
 
@@ -123,6 +131,10 @@ def add_city(n_clicks, city, cities):
     Output('wind_speed_graph', 'figure'),
     Output('relative_humidity_graph', 'figure'),
     Output('precipitation_probability_graph', 'figure'),
+    Output('temperature_map', 'figure'),
+    Output('wind_speed_map', 'figure'),
+    Output('relative_humidity_map', 'figure'),
+    Output('precipitation_map', 'figure'),
     Input('show_button', 'n_clicks'),
     State('start_city', 'value'),
     State('end_city', 'value'),
@@ -130,48 +142,106 @@ def add_city(n_clicks, city, cities):
     State('days_number_dropdown', 'value')
 )
 def update_weather_forecast(n_clicks, start_city, end_city, cities_list, days):
-    cities_list = [city['props']['children'] for city in cities_list]
-    if n_clicks > 0:
-        all_cities_on_route = cities_list
-        all_cities_on_route.insert(0, start_city)
-        all_cities_on_route.append(end_city)
+    try:
+        cities_list = [city['props']['children'] for city in cities_list]
+        if n_clicks > 0:
+            all_cities_on_route = cities_list
+            all_cities_on_route.insert(0, start_city)
+            all_cities_on_route.append(end_city)
 
-        # Словарь для хранения данных о погоде
-        cities_weather_data = {
-            'City': [],
-            'Temperature': [],
-            'Wind Speed': [],
-            'Relative Humidity': [],
-            'Precipitation Probability': []
-        }
+            # Словарь для хранения данных о погоде
+            cities_weather_data = {
+                'city': [],
+                'temperature': [],
+                'wind speed': [],
+                'relative humidity': [],
+                'precipitation probability': [],
+                'lat': [],
+                'lon': []
+            }
 
-        for city in all_cities_on_route:
-            if city not in cached_city_weather_data.keys():
-                weather_data = get_5_day_forecast(*get_coordinates_by_city(city))
-                cached_city_weather_data[city] = weather_data
-            else:
-                weather_data = cached_city_weather_data[city]
-            day_weather_data = get_weather_by_day(weather_data, days)
-            if isinstance(day_weather_data, tuple):
-                temperature, wind_speed, relative_humidity, precipitation_probability = day_weather_data[0:4]
-                cities_weather_data['City'].append(city)
-                cities_weather_data['Temperature'].append(temperature)
-                cities_weather_data['Wind Speed'].append(wind_speed)
-                cities_weather_data['Relative Humidity'].append(relative_humidity)
-                cities_weather_data['Precipitation Probability'].append(precipitation_probability)
-            else:
-                print(day_weather_data)
+            for city in all_cities_on_route:
+                if city not in cached_city_weather_data.keys():
+                    lat, lon = get_coordinates_by_city(city)
+                    weather_data = get_5_day_forecast(lat, lon)
+                    cached_city_weather_data[city] = weather_data, lat, lon
+                else:
+                    weather_data, lat, lon = cached_city_weather_data[city]
+                day_weather_data = get_weather_by_day(weather_data, days)
+                if isinstance(day_weather_data, tuple):
+                    temperature, wind_speed, relative_humidity, precipitation_probability = day_weather_data[0:4]
+                    cities_weather_data['city'].append(city)
+                    cities_weather_data['temperature'].append(temperature)
+                    cities_weather_data['wind speed'].append(wind_speed)
+                    cities_weather_data['relative humidity'].append(relative_humidity)
+                    cities_weather_data['precipitation probability'].append(precipitation_probability)
+                    cities_weather_data['lat'].append(lat)
+                    cities_weather_data['lon'].append(lon)
 
-        temperature_fig = px.line(cities_weather_data, x='City', y='Temperature', title='Температура по городам')
-        wind_speed_fig = px.bar(cities_weather_data, x='City', y='Wind Speed', title='Скорость ветра по городам')
-        humidity_fig = px.bar(cities_weather_data, x='City', y='Relative Humidity',
-                              title='Относительная влажность по городам')
-        precipitation_fig = px.bar(cities_weather_data, x='City', y='Precipitation Probability',
-                                   title='Вероятность осадков')
+                else:
+                    print(day_weather_data)
 
-        return temperature_fig, wind_speed_fig, humidity_fig, precipitation_fig
+            temperature_fig = px.line(cities_weather_data, x='city', y='temperature', title='Температура по городам')
+            wind_speed_fig = px.bar(cities_weather_data, x='city', y='wind speed', title='Скорость ветра по городам')
+            humidity_fig = px.bar(cities_weather_data, x='city', y='relative humidity',
+                                  title='Относительная влажность по городам')
+            precipitation_fig = px.bar(cities_weather_data, x='city', y='precipitation probability',
+                                       title='Вероятность осадков')
+            temperature_map = px.scatter_mapbox(
+                cities_weather_data,
+                lat='lat',
+                lon='lon',
+                hover_name='city',
+                color='temperature',
+                size=[t + 100 for t in cities_weather_data['temperature']],
+                color_continuous_scale=px.colors.sequential.Plasma,
+                size_max=25,
+                zoom=3,
+                mapbox_style='open-street-map'
+            )
+            wind_speed_map = px.scatter_mapbox(
+                cities_weather_data,
+                lat='lat',
+                lon='lon',
+                hover_name='city',
+                color='wind speed',
+                size='wind speed',
+                color_continuous_scale=px.colors.sequential.Plasma,
+                size_max=25,
+                zoom=3,
+                mapbox_style='open-street-map'
+            )
+            humidity_map = px.scatter_mapbox(
+                cities_weather_data,
+                lat='lat',
+                lon='lon',
+                hover_name='city',
+                color='relative humidity',
+                size='relative humidity',
+                color_continuous_scale=px.colors.sequential.Plasma,
+                size_max=25,
+                zoom=3,
+                mapbox_style='open-street-map'
+            )
+            precipitation_map = px.scatter_mapbox(
+                cities_weather_data,
+                lat='lat',
+                lon='lon',
+                hover_name='city',
+                color='precipitation probability',
+                size='precipitation probability',
+                color_continuous_scale=px.colors.sequential.Plasma,
+                size_max=25,
+                zoom=3,
+                mapbox_style='open-street-map'
+            )
 
-    return {}, {}, {}, {}
+            return (temperature_fig, wind_speed_fig, humidity_fig, precipitation_fig, temperature_map, wind_speed_map,
+                    humidity_map, precipitation_map)
+
+        return {}, {}, {}, {}, {}, {}, {}, {}
+    except Exception as e:
+        return f'Ошибка: {e}'
 
 
 if __name__ == '__main__':
