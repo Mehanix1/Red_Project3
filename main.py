@@ -13,7 +13,8 @@ app = Dash(__name__)
 cached_city_weather_data = dict()
 
 
-def get_weather(lat, lon, day):
+# функция для получения погоды на 5 дней
+def get_5_day_forecast(lat, lon):
     try:
         # url для запроса для получения локации по координатам
         url_for_location = f'http://dataservice.accuweather.com/locations/v1/cities/geoposition/search'
@@ -34,23 +35,26 @@ def get_weather(lat, lon, day):
             weather_response = requests.get(url_for_weather, weather_params)
             if weather_response.status_code == 200:
                 weather_data = weather_response.json()
-                # pprint(weather_data)
-                # ключевые параметры прогноза погоды
-                # temperature = weather_data[0]['Temperature']['Metric']['Value']
-                temperature = round(
-                    (weather_data['DailyForecasts'][day]['Day']['WetBulbGlobeTemperature']['Average']['Value']) / 1.8,
-                    1)
-                # precipitation_type = weather_data[0]['PrecipitationType']
-                # wind_speed = weather_data[0]['Wind']['Speed']['Metric']['Value']
-                wind_speed = weather_data['DailyForecasts'][day]['Day']['Wind']['Speed']['Value'] / 2.237
-                # эти параметры не всегда существуют, поэтому используем get
-                relative_humidity = weather_data['DailyForecasts'][day]['Day']['RelativeHumidity']['Average']
-                precipitation_probability = weather_data['DailyForecasts'][day]['Day']['PrecipitationProbability']
-                return temperature, wind_speed, relative_humidity, precipitation_probability
+                return weather_data
+
             return f'Ошибка {response.status_code}'
         return f'Ошибка {response.status_code}'
     except Exception as e:
         return f'Ошибка: {e}'
+
+
+def get_weather_by_day(weather_data, day):
+    # ключевые параметры прогноза погоды
+    temperature = round(
+        (weather_data['DailyForecasts'][day]['Day']['WetBulbGlobeTemperature']['Average']['Value']) / 1.8,
+        1)
+    # precipitation_type = weather_data[0]['PrecipitationType']
+    # wind_speed = weather_data[0]['Wind']['Speed']['Metric']['Value']
+    wind_speed = weather_data['DailyForecasts'][day]['Day']['Wind']['Speed']['Value'] / 2.237
+    # эти параметры не всегда существуют, поэтому используем get
+    relative_humidity = weather_data['DailyForecasts'][day]['Day']['RelativeHumidity']['Average']
+    precipitation_probability = weather_data['DailyForecasts'][day]['Day']['PrecipitationProbability']
+    return temperature, wind_speed, relative_humidity, precipitation_probability
 
 
 # функция для получения координат по названию города
@@ -150,7 +154,7 @@ def update_weather_forecast(n_clicks, start_city, end_city, cities_list, days):
 
         for city in all_cities_on_route:
             if city not in cached_city_weather_data.keys():
-                weather_data = get_weather(*get_coordinates_by_city(city), days)
+                weather_data = get_5_day_forecast(*get_coordinates_by_city(city), days)
                 cached_city_weather_data[city] = weather_data
             else:
                 weather_data = cached_city_weather_data[city]
